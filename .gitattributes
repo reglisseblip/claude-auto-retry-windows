@@ -1,0 +1,4 @@
+# Normalize all text to LF in the repository (shell scripts must be LF; JS/PS
+# tolerate it). The .cmd shims are generated at runtime with CRLF by the
+# installer, not stored here.
+* text=auto eol=lf
