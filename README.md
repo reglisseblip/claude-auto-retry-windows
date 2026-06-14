@@ -67,6 +67,26 @@ node bin\cli.js doctor
 
 You should see `All checks passed — interactive auto-retry is supported on this machine.`
 
+## Wrapping `claude+` and other aliases
+
+A common setup is a flagged variant, e.g. `claude+` = `claude --dangerously-skip-permissions`.
+To give that variant auto-retry too:
+
+- **bash / zsh** (incl. Git Bash): nothing extra. An alias like
+  `alias claude+="claude --dangerously-skip-permissions"` expands to `claude …`, which
+  hits the installed `claude()` function — so it routes through the launcher
+  automatically once you've run `install`.
+- **PowerShell / cmd**: if the variant is a `.cmd`/`.bat` shim that calls `claude`
+  directly (e.g. `%USERPROFILE%\.local\bin\claude+.cmd`), it bypasses the launcher.
+  Point it at the launcher instead (keep a `.bak` of the original):
+
+  ```cmd
+  @echo off
+  node "C:\path\to\claude-auto-retry-windows\src\launcher.js" --dangerously-skip-permissions %*
+  ```
+
+  Any extra args you pass to `claude+` are forwarded after the flag.
+
 ## How it works
 
 ```
