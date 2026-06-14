@@ -15,7 +15,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SRC_DIR = join(__dirname, '..', 'src');
 const LAUNCHER_PATH = join(SRC_DIR, 'launcher.js');
-const WRAPPER_TEMPLATE = join(SRC_DIR, 'wrapper.ps1');
+const PS_WRAPPER_TEMPLATE = join(SRC_DIR, 'wrapper.ps1');
+const SH_WRAPPER_TEMPLATE = join(SRC_DIR, 'wrapper.sh');
 
 export const MARKER_START = '# >>> claude-auto-retry-windows >>>';
 export const MARKER_END = '# <<< claude-auto-retry-windows <<<';
@@ -46,12 +47,16 @@ function powershellHosts() {
   return hosts;
 }
 
-async function injectWrapper(rcFile, launcherPath) {
+async function injectWrapper(rcFile, templatePath, launcherPath, { bash = false } = {}) {
   let content = '';
   try { content = await readFile(rcFile, 'utf-8'); } catch { /* new file */ }
 
-  const template = await readFile(WRAPPER_TEMPLATE, 'utf-8');
-  const wrapper = template.replace(/__LAUNCHER_PATH__/g, launcherPath.replace(/\\/g, '\\\\'));
+  const template = await readFile(templatePath, 'utf-8');
+  // bash + node accept forward slashes; PowerShell strings need escaped backslashes.
+  const launcherForTemplate = bash
+    ? launcherPath.replace(/\\/g, '/')
+    : launcherPath.replace(/\\/g, '\\\\');
+  const wrapper = template.replace(/__LAUNCHER_PATH__/g, launcherForTemplate);
 
   const startIdx = content.indexOf(MARKER_START);
   const endIdx = content.indexOf(MARKER_END);
@@ -63,10 +68,21 @@ async function injectWrapper(rcFile, launcherPath) {
     content = content.slice(0, startIdx) + content.slice(skipTo);
   }
 
-  content = content.trimEnd() + '\r\n\r\n' + wrapper.trimEnd() + '\r\n';
+  const eol = bash ? '\n' : '\r\n';
+  content = content.trimEnd() + eol + eol + wrapper.trimEnd() + eol;
   const dir = dirname(rcFile);
   if (!existsSync(dir)) execFileSync('node', ['-e', `require('fs').mkdirSync(${JSON.stringify(dir)},{recursive:true})`]);
   await writeFile(rcFile, content);
+}
+
+// bash/zsh rc files that exist (so Git Bash / WSL users get the wrapper too).
+function bashRcFiles() {
+  const files = [];
+  for (const name of ['.bashrc', '.zshrc']) {
+    const p = join(homedir(), name);
+    if (existsSync(p)) files.push(p);
+  }
+  return files;
 }
 
 async function removeWrapper(rcFile) {
@@ -107,19 +123,29 @@ async function cmdInstall() {
   if (claude) console.log(ok(`claude found at ${claude}`));
   else console.log(warn('claude not found on PATH (the wrapper will still install; make sure `claude` works in a new shell)'));
 
-  const hosts = powershellHosts();
-  if (hosts.length === 0) {
-    console.log(bad('No PowerShell host found (pwsh / powershell).'));
+  let targets = 0;
+
+  // PowerShell hosts (pwsh 7 / Windows PowerShell 5)
+  for (const { exe, profile } of powershellHosts()) {
+    await injectWrapper(profile, PS_WRAPPER_TEMPLATE, LAUNCHER_PATH);
+    console.log(ok(`Wrapper added to ${exe} profile: ${profile}`));
+    targets++;
+  }
+
+  // bash / zsh (Git Bash on Windows, or WSL)
+  for (const rc of bashRcFiles()) {
+    await injectWrapper(rc, SH_WRAPPER_TEMPLATE, LAUNCHER_PATH, { bash: true });
+    console.log(ok(`Wrapper added to ${rc}`));
+    targets++;
+  }
+
+  if (targets === 0) {
+    console.log(bad('No shell profile found (no PowerShell host, no ~/.bashrc or ~/.zshrc).'));
     process.exit(1);
   }
 
-  for (const { exe, profile } of hosts) {
-    await injectWrapper(profile, LAUNCHER_PATH);
-    console.log(ok(`Wrapper added to ${exe} profile: ${profile}`));
-  }
-
-  console.log(`\nInstalled. Launcher: ${LAUNCHER_PATH}`);
-  console.log('\nOpen a NEW PowerShell window (or run `. $PROFILE`) and just use `claude` as usual.');
+  console.log(`\nInstalled into ${targets} shell profile(s). Launcher: ${LAUNCHER_PATH}`);
+  console.log('\nOpen a NEW shell (PowerShell: new window; bash: `source ~/.bashrc`) and use `claude` as usual.');
   console.log('Verify everything with:  node bin/cli.js doctor');
 }
 
@@ -128,7 +154,11 @@ async function cmdUninstall() {
     await removeWrapper(profile);
     console.log(ok(`Wrapper removed from ${exe} profile: ${profile}`));
   }
-  console.log('\nOpen a new PowerShell window to complete removal.');
+  for (const rc of bashRcFiles()) {
+    await removeWrapper(rc);
+    console.log(ok(`Wrapper removed from ${rc}`));
+  }
+  console.log('\nOpen a new shell to complete removal.');
 }
 
 // Live end-to-end probe of the mux primitives the tool depends on.
@@ -154,10 +184,14 @@ async function cmdDoctor() {
   console.log(ok(`${mux} version ${getMuxVersion()}`));
 
   // wrapper installed?
-  for (const { exe, profile } of powershellHosts()) {
+  const profilesToCheck = [
+    ...powershellHosts().map(h => ({ label: `${h.exe} profile`, file: h.profile })),
+    ...bashRcFiles().map(f => ({ label: f, file: f })),
+  ];
+  for (const { label, file } of profilesToCheck) {
     let installed = false;
-    try { installed = (await readFile(profile, 'utf-8')).includes(MARKER_START); } catch {}
-    console.log(installed ? ok(`wrapper installed in ${exe} profile`) : warn(`wrapper NOT in ${exe} profile (run: node bin/cli.js install)`));
+    try { installed = (await readFile(file, 'utf-8')).includes(MARKER_START); } catch {}
+    console.log(installed ? ok(`wrapper installed in ${label}`) : warn(`wrapper NOT in ${label} (run: node bin/cli.js install)`));
   }
 
   // --- live primitive probe ---
