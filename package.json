@@ -11,7 +11,7 @@
     "doctor": "node bin/cli.js doctor"
   },
   "license": "MIT",
-  "author": "cestsiloinlesetoiles",
+  "author": "reglisseblip",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/reglisseblip/claude-auto-retry-windows.git"

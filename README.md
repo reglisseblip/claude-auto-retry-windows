@@ -248,4 +248,4 @@ The platform-specific code lives in `src/mux.js` (psmux/tmux adapter), `src/laun
 - Original tool & detection/timing logic: [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) (MIT)
 - Windows multiplexer: [psmux](https://github.com/psmux/psmux)
 
-Author: **cestsiloinlesetoiles** · MIT licensed — see [`LICENSE`](LICENSE).
+Author: **reglisseblip** · MIT licensed — see [`LICENSE`](LICENSE).
