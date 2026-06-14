@@ -1,52 +1,68 @@
+<div align="center">
+
 # claude-auto-retry-windows
 
-> Native **Windows** port of [`claude-auto-retry`](https://github.com/cheapestinference/claude-auto-retry) — auto-resume Claude Code after you hit a subscription rate limit, **without WSL or tmux**.
+### Auto-resume Claude Code after subscription rate limits — on **native Windows**, no WSL, no tmux.
 
-When Claude Code shows:
+[![CI](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml/badge.svg)](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#requirements)
+[![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-5FA04E?logo=node.js&logoColor=white)](#requirements)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
+
+</div>
+
+When Claude Code stops with *“You've hit your limit · resets 3pm”*, this tool waits for the
+reset and types **`continue`** for you. You come back to finished work — no babysitting.
+
+It's a Windows port of [`claude-auto-retry`](https://github.com/cheapestinference/claude-auto-retry)
+(which requires **tmux**), rebuilt on [**psmux**](https://github.com/psmux/psmux) — a native
+Windows terminal multiplexer — so everything runs in **Git Bash, PowerShell, or cmd** with no WSL.
+
+---
+
+## Table of contents
+
+- [Why](#why)
+- [Features](#features)
+- [Install](#install)
+- [Commands & modes](#commands--modes)
+- [How it works](#how-it-works)
+- [Configuration](#configuration)
+- [CLI reference](#cli-reference)
+- [Auto-cleanup](#auto-cleanup)
+- [Requirements](#requirements)
+- [How it's verified](#how-its-verified)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Credits & license](#credits--license)
+
+## Why
+
+You're mid-task with Claude Code and hit the 5-hour / usage limit:
 
 ```
 You've hit your limit · resets 3pm (Europe/Dublin)
 ```
 
-…this tool detects the message, waits until the limit resets (+ a small margin), and sends `continue` for you. You come back to find your task finished.
+Claude stops. You wait hours, come back, and type “continue”. Overnight or AFK runs stall.
+This tool detects that message, parses the reset time (timezone- and DST-aware), waits, and
+sends `continue` automatically.
 
-The upstream tool is Linux/macOS only because it drives **tmux**. This port swaps tmux for **[psmux](https://github.com/psmux/psmux)** — a native Windows terminal multiplexer (Rust + ConPTY) that speaks the tmux command language — so the whole thing runs in PowerShell / Windows Terminal with no WSL.
+## Features
 
----
-
-## Status: verified on this machine
-
-Every multiplexer primitive the tool relies on was probed live against **psmux 3.3.5** and passed:
-
-| Primitive | Used for | Result |
-|---|---|---|
-| `new-session -d -s … -- <cmd>` | run Claude in a background session | ✅ |
-| `has-session` | know when Claude exited | ✅ |
-| `capture-pane -t … -p -S -N` | read Claude's TUI to detect the limit | ✅ |
-| `send-keys -t … "continue" Enter` | type `continue` for you | ✅ (child received it on stdin) |
-| `display-message -p '#{pane_current_command}'` | safety: only send to Claude | ✅ (returns `claude`) |
-| `kill-session` | cleanup | ✅ |
-
-Run `node bin/cli.js doctor` to re-run this probe on your machine at any time.
-
-> **One caveat to test in real use:** `attach-session` (joining your terminal to the
-> session) needs an interactive console, so it can't be exercised by an automated
-> probe. Everything *around* it is verified. If attach ever misbehaves, the launcher
-> falls back to running Claude directly (you simply lose the auto-retry for that run).
-
----
-
-## Requirements
-
-- Windows 10/11, PowerShell 7+ recommended (Windows PowerShell 5.1 also works)
-- [Node.js](https://nodejs.org) ≥ 18
-- [psmux](https://github.com/psmux/psmux): `winget install --id marlocarlo.psmux`
-- Claude Code (`claude` on your PATH)
+- 🔁 **Auto-continue** after the rate limit resets — accurate, timezone/DST-aware reset parsing.
+- 🪟 **100 % native Windows** — uses **psmux**, not tmux; works in Git Bash, PowerShell and cmd, **no WSL**.
+- 🎚️ **Opt-in monitoring** — `claude` (vanilla) vs `claudem` (monitored), or override any launch with `--monitor` / `--no-monitor`.
+- 🧹 **Self-cleaning** — orphaned sessions are auto-reaped; no leftover background processes flashing console windows.
+- 🩺 **`doctor`** — live-tests every psmux primitive on *your* machine before you trust it.
+- 🖨️ **Print mode too** — `claude -p` retries headlessly with no multiplexer.
+- 📦 **No dependencies** — just Node ≥ 18 and psmux.
 
 ## Install
 
-One-shot installer (checks node, installs psmux via winget if missing, wires all four
-commands, runs doctor). From the repo root:
+One-shot installer (checks Node, installs psmux via winget if missing, wires the four commands,
+runs `doctor`). From the repo root:
 
 ```bash
 # Git Bash
@@ -58,94 +74,61 @@ bash scripts/install.sh
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-or do it by hand:
+<details>
+<summary>…or do it by hand</summary>
 
 ```bash
 winget install --id marlocarlo.psmux     # if psmux isn't installed
 node bin/cli.js install                  # wires claude / claude+ / claudem / claudem+
 ```
+</details>
 
-Then open a **new** shell (bash: `source ~/.bashrc`). You now have four commands (see below).
-
-## Verify
-
-```powershell
-node bin\cli.js doctor
-```
-
-You should see `All checks passed — interactive auto-retry is supported on this machine.`
+Then open a **new** shell (bash: `source ~/.bashrc`). Verify with `node bin/cli.js doctor`.
 
 ## Commands & modes
 
-Monitoring is **opt-in**: choose it by the command name or a flag. No prompt.
+Monitoring is **opt-in** — choose it by command name or a flag. No prompts.
 
 | Command    | Monitoring (psmux + auto-retry) | Permissions |
-|------------|---------------------------------|-------------|
-| `claude`   | off (vanilla)                   | normal |
-| `claude+`  | off (vanilla)                   | `--dangerously-skip-permissions` |
-| `claudem`  | **on**                          | normal |
-| `claudem+` | **on**                          | `--dangerously-skip-permissions` |
+|------------|:-------------------------------:|-------------|
+| `claude`   | ⚪ off (vanilla)                | normal |
+| `claude+`  | ⚪ off (vanilla)                | `--dangerously-skip-permissions` |
+| `claudem`  | 🟢 **on**                       | normal |
+| `claudem+` | 🟢 **on**                       | `--dangerously-skip-permissions` |
 
 Per-launch override (works on any of them, stripped before reaching Claude):
 
-```
+```bash
 claude  --monitor      # this run IS monitored, despite the name
 claudem --no-monitor   # this run is vanilla, despite the name
 ```
 
-How the choice is resolved, highest priority first: `--monitor`/`--no-monitor` flag →
-`CLAUDE_AUTO_RETRY_DEFAULT` env (set by each command's wrapper) → `enabled` in config.
-
-Wiring: `claude` / `claudem` are shell functions (bash + PowerShell); `claude+` / `claudem+`
-are `.cmd` shims next to `claude.exe` (a `.cmd` can't shadow `claude` itself, but the
-+variants are new names). `claude -p` / `claudem -p` (print mode) never use psmux.
+Resolution order: `--monitor`/`--no-monitor` flag → `CLAUDE_AUTO_RETRY_DEFAULT` env (set by each
+wrapper) → `enabled` in config. In a monitored session you'll see the green **psmux status bar** at
+the bottom — that's how you know auto-retry is armed.
 
 ## How it works
 
 ```
-You type `claude`  (PowerShell function from your $PROFILE)
+You type `claudem`  (shell function / .cmd shim)
         │
         ▼
-  node src/launcher.js
+  node src/launcher.js   ──►  resolveMode(): vanilla vs monitored
         │
-        ├── interactive run:
-        │     psmux new-session -d -s clr-… -- claude <your args>   (Claude runs here)
-        │     fork  src/monitor.js  ── polls capture-pane every 5s
-        │     psmux attach-session  ── your terminal joins the session
+        ├─ vanilla:    run claude.exe directly (no psmux, no monitor)
         │
-        └── `claude -p` (print) run: no multiplexer needed — the command is
-              re-run on rate limit by buffering stdout/stderr.
+        └─ monitored interactive:
+              psmux new-session -d -s clr-…  -- claude …   (Claude runs here)
+              fork  src/monitor.js  ── polls capture-pane every 5s
+              psmux attach-session  ── your terminal joins the session
 
-  monitor.js loop:
-     capture-pane → strip ANSI → detect "limit … resets …"
-        → parse reset time (timezone-aware, DST-safe)
-        → wait until reset + margin
-        → send-keys "continue" Enter
+  monitor loop:  capture-pane → strip ANSI → detect "limit … resets …"
+                 → parse reset time → wait until reset + margin
+                 → send-keys "continue"   → back to work
 ```
 
-`claude -p`/`--print` (non-interactive) mode doesn't use psmux at all and works on
-any platform: the launcher just re-runs the command after the limit resets.
-
-## Auto-cleanup (no orphaned sessions)
-
-The monitor and session are launched automatically — you never start anything by hand.
-They're also torn down automatically:
-
-- **Normal quit** (you exit Claude): the session ends, the monitor logs *"Session ended"* and exits.
-- **Hard-closed terminal / detach**: the session would otherwise linger detached. Each monitor
-  watches `#{session_attached}` and, once its session has **no console attached for
-  `reapUnattachedSeconds` (default 15s)**, it kills the session and exits.
-- **Leftovers from before**: every launch also sweeps stale orphaned `clr-*` sessions
-  (unattached, older than 60s) — see `reapOrphansOnLaunch`.
-
-Inspect or force it anytime:
-
-```powershell
-node bin\cli.js sessions   # attached vs orphan
-node bin\cli.js reap       # kill all unattached clr-* sessions now (keeps attached ones)
-```
-
-Set `reapUnattachedSeconds` to `0` if you'd rather keep detached sessions alive for reattaching.
+`claude -p` / `claudem -p` (print mode) never use psmux: the command is simply re-run after the
+limit resets.
 
 ## Configuration
 
@@ -169,40 +152,100 @@ Optional `~/.claude-auto-retry.json` (i.e. `C:\Users\<you>\.claude-auto-retry.js
 
 Environment overrides:
 
-- `CLAUDE_AUTO_RETRY_MUX` — multiplexer binary (default `psmux` on Windows, `tmux` elsewhere). E.g. set to `tmux` to reuse this code under WSL.
-- `CLAUDE_BIN` — explicit path to the Claude executable.
-- `CLAUDE_AUTO_RETRY_DEFAULT` — `1`/`0` to default a launch to monitored/vanilla (set automatically by the `claude` vs `claudem` wrappers; a `--monitor`/`--no-monitor` flag overrides it).
+| Variable | Effect |
+|---|---|
+| `CLAUDE_AUTO_RETRY_DEFAULT` | `1`/`0` to default a launch to monitored/vanilla (set by the wrappers; a flag overrides it). |
+| `CLAUDE_AUTO_RETRY_MUX` | Multiplexer binary (default `psmux` on Windows, `tmux` elsewhere — e.g. reuse under WSL). |
+| `CLAUDE_BIN` | Explicit path to the Claude executable. |
 
-## Commands
+## CLI reference
 
 ```
-node bin\cli.js install     Add the PowerShell `claude` wrapper to your profile(s)
-node bin\cli.js uninstall   Remove it
-node bin\cli.js doctor      Live-test psmux session / capture / send-keys
-node bin\cli.js sessions    List claude-auto-retry sessions (attached / orphan)
-node bin\cli.js reap        Kill orphaned (unattached) sessions right now
-node bin\cli.js status      Recent monitor log entries
-node bin\cli.js logs        Today's full log
-node bin\cli.js version     Print version
+node bin/cli.js install      Wire claude / claude+ / claudem / claudem+ (+ .cmd shims)
+node bin/cli.js uninstall    Remove the wrappers and shims
+node bin/cli.js doctor       Live-test psmux session / capture / send-keys
+node bin/cli.js sessions     List sessions (attached / orphan)
+node bin/cli.js reap         Kill orphaned (unattached) sessions now
+node bin/cli.js status       Recent monitor log entries
+node bin/cli.js logs         Today's full log
+node bin/cli.js version      Print version
 ```
 
-Logs: `C:\Users\<you>\.claude-auto-retry\logs\<date>.log`.
+Logs live in `C:\Users\<you>\.claude-auto-retry\logs\<date>.log`.
 
-## Tests
+## Auto-cleanup
 
-```powershell
-npm test      # node --test: pattern detection, time parsing, mux arg builders
+You never start the monitor by hand — and nothing is left running:
+
+- **Normal quit:** the session ends, the monitor logs *“Session ended”* and exits.
+- **Hard-closed terminal / detach:** each monitor watches `#{session_attached}`; once its session has
+  had **no console for `reapUnattachedSeconds` (15s default)** it kills the session and exits.
+- **Old leftovers:** every launch also sweeps stale orphaned `clr-*` sessions (unattached, >60s old).
+
+```bash
+node bin/cli.js sessions   # attached vs orphan
+node bin/cli.js reap       # kill all unattached sessions now (keeps attached ones)
 ```
 
-## Uninstall
+Set `reapUnattachedSeconds` to `0` to keep detached sessions alive for reattaching.
 
-```powershell
-node bin\cli.js uninstall
+## Requirements
+
+- Windows 10/11 — PowerShell 7+ recommended (Windows PowerShell 5.1 also works), Git Bash, or cmd
+- [Node.js](https://nodejs.org) ≥ 18
+- [psmux](https://github.com/psmux/psmux) ≥ 3 — `winget install --id marlocarlo.psmux`
+- Claude Code (`claude` on your PATH)
+
+## How it's verified
+
+`node bin/cli.js doctor` spins up a scratch psmux session and live-tests every primitive the tool
+relies on, so you can trust it on your exact setup:
+
+| Primitive | Used for |
+|---|---|
+| `new-session -d … -- <cmd>` | run Claude in a background session |
+| `has-session` | detect when Claude exits |
+| `capture-pane -t … -p` | read Claude's TUI to detect the limit |
+| `send-keys -t … "continue"` | type `continue` for you |
+| `display-message '#{…}'` | only send to Claude, never the wrong process |
+| `kill-session` | cleanup |
+
+The unit tests (`npm test`) cover the pure logic — rate-limit detection, timezone/DST reset parsing,
+mode resolution and the reap state machine — and run in CI on every push.
+
+> **Note:** interactive `attach-session` needs a real console, so it's the one thing the automated
+> probe can't exercise. It works best in **Windows Terminal / PowerShell**; if it ever fails the
+> launcher falls back to running Claude directly (you only lose auto-retry for that run).
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `claude` / `claudem` “not found” after install | Open a **new** shell, or `source ~/.bashrc`. |
+| `psmux` not found | `winget install --id marlocarlo.psmux`, then open a new shell. |
+| Console windows flicker | Update psmux; this is fixed via `windowsHide` on all psmux calls. |
+| Interactive session glitches in plain Git Bash (mintty) | Use **Windows Terminal** or PowerShell (real ConPTY console). |
+| Want plain Claude, just this once | `claudem --no-monitor`, or just use `claude`. |
+| Orphaned sessions piling up | `node bin/cli.js reap` (and they self-reap after 15s anyway). |
+
+## Contributing
+
+Issues and PRs welcome. To hack on it:
+
+```bash
+git clone https://github.com/reglisseblip/claude-auto-retry-windows
+cd claude-auto-retry-windows
+npm test          # node --test (pure-logic unit tests, no psmux needed)
+node bin/cli.js doctor   # full live check (needs psmux on Windows)
 ```
 
-## Credits
+The platform-specific code lives in `src/mux.js` (psmux/tmux adapter), `src/launcher.js`
+(mode + routing) and `src/monitor.js` (detect → retry → reap). Detection and timing logic
+(`patterns.js`, `time-parser.js`) is shared with upstream and unit-tested.
+
+## Credits & license
 
 - Original tool & detection/timing logic: [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) (MIT)
 - Windows multiplexer: [psmux](https://github.com/psmux/psmux)
 
-MIT licensed. See `LICENSE`.
+Author: **cestsiloinlesetoiles** · MIT licensed — see [`LICENSE`](LICENSE).
