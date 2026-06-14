@@ -45,19 +45,27 @@ Run `node bin/cli.js doctor` to re-run this probe on your machine at any time.
 
 ## Install
 
+One-shot installer (checks node, installs psmux via winget if missing, wires all four
+commands, runs doctor). From the repo root:
+
+```bash
+# Git Bash
+bash scripts/install.sh
+```
+
 ```powershell
-# from the repo root
-winget install --id marlocarlo.psmux        # if not already installed
+# PowerShell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-or directly:
+or do it by hand:
 
-```powershell
-node bin\cli.js install      # adds a `claude` function to your PowerShell $PROFILE
+```bash
+winget install --id marlocarlo.psmux     # if psmux isn't installed
+node bin/cli.js install                  # wires claude / claude+ / claudem / claudem+
 ```
 
-Then open a **new** shell. You now have four commands (see below).
+Then open a **new** shell (bash: `source ~/.bashrc`). You now have four commands (see below).
 
 ## Verify
 
