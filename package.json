@@ -14,12 +14,12 @@
   "author": "cestsiloinlesetoiles",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/cestsiloinlesetoiles/claude-auto-retry-windows.git"
+    "url": "git+https://github.com/reglisseblip/claude-auto-retry-windows.git"
   },
   "bugs": {
-    "url": "https://github.com/cestsiloinlesetoiles/claude-auto-retry-windows/issues"
+    "url": "https://github.com/reglisseblip/claude-auto-retry-windows/issues"
   },
-  "homepage": "https://github.com/cestsiloinlesetoiles/claude-auto-retry-windows#readme",
+  "homepage": "https://github.com/reglisseblip/claude-auto-retry-windows#readme",
   "engines": {
     "node": ">=18.0.0"
   },
