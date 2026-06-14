@@ -41,6 +41,7 @@ async function launchPrintMode(args) {
       const errChunks = [];
       const claude = spawn(claudeBin, args, {
         stdio: ['inherit', 'pipe', 'pipe'],
+        windowsHide: true,
         env: { ...process.env, CLAUDE_AUTO_RETRY_ACTIVE: '1' },
       });
 
@@ -80,6 +81,7 @@ async function launchPrintMode(args) {
 function runClaudeDirect(claudeBin, args) {
   const claude = spawn(claudeBin, args, {
     stdio: 'inherit',
+    windowsHide: true,
     env: { ...process.env, CLAUDE_AUTO_RETRY_ACTIVE: '1' },
   });
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
@@ -113,9 +115,12 @@ async function launchInteractive(args) {
   }
 
   // Detached background monitor, targeting the session by name.
+  // windowsHide keeps this hidden node process (and the psmux calls it makes
+  // every poll) from flashing console windows on Windows.
   const monitor = fork(MONITOR_PATH, [sessionName], {
     detached: true,
     stdio: 'ignore',
+    windowsHide: true,
     env: { ...process.env, CLAUDE_AUTO_RETRY_SESSION: sessionName },
   });
   monitor.unref();

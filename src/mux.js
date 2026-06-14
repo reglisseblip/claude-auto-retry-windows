@@ -14,6 +14,11 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFileCb);
 
+// CRITICAL on Windows: psmux.exe is a console app. The monitor (a background
+// process) shells out to it every few seconds; without windowsHide each call
+// flashes a console window. windowsHide forces CREATE_NO_WINDOW so nothing pops.
+const HIDE = process.platform === 'win32' ? { windowsHide: true } : {};
+
 export function getMuxBinary() {
   return process.env.CLAUDE_AUTO_RETRY_MUX
     || (process.platform === 'win32' ? 'psmux' : 'tmux');
@@ -47,7 +52,7 @@ export function parseMuxVersion(versionString) {
 
 export function getMuxVersion() {
   try {
-    return parseMuxVersion(execFileSync(getMuxBinary(), ['-V'], { encoding: 'utf-8' }).trim());
+    return parseMuxVersion(execFileSync(getMuxBinary(), ['-V'], { encoding: 'utf-8', ...HIDE }).trim());
   } catch {
     return 0;
   }
@@ -55,7 +60,7 @@ export function getMuxVersion() {
 
 export function muxAvailable() {
   try {
-    execFileSync(getMuxBinary(), ['-V'], { stdio: 'ignore' });
+    execFileSync(getMuxBinary(), ['-V'], { stdio: 'ignore', ...HIDE });
     return true;
   } catch {
     return false;
@@ -63,17 +68,17 @@ export function muxAvailable() {
 }
 
 export async function capturePane(target, lines = 200) {
-  const { stdout } = await execFileAsync(getMuxBinary(), buildCaptureArgs(target, lines));
+  const { stdout } = await execFileAsync(getMuxBinary(), buildCaptureArgs(target, lines), { maxBuffer: 4 * 1024 * 1024, ...HIDE });
   return stdout;
 }
 
 export async function sendKeys(target, text) {
-  await execFileAsync(getMuxBinary(), buildSendKeysArgs(target, text));
+  await execFileAsync(getMuxBinary(), buildSendKeysArgs(target, text), { ...HIDE });
 }
 
 export async function getPaneCommand(target) {
   try {
-    const { stdout } = await execFileAsync(getMuxBinary(), buildDisplayArgs(target, '#{pane_current_command}'));
+    const { stdout } = await execFileAsync(getMuxBinary(), buildDisplayArgs(target, '#{pane_current_command}'), { ...HIDE });
     return stdout.trim();
   } catch {
     // display-message may be unavailable for a given target; caller treats
@@ -83,12 +88,12 @@ export async function getPaneCommand(target) {
 }
 
 export function newSessionDetached(name, cmd, args) {
-  execFileSync(getMuxBinary(), buildNewSessionArgs(name, cmd, args), { stdio: 'ignore' });
+  execFileSync(getMuxBinary(), buildNewSessionArgs(name, cmd, args), { stdio: 'ignore', ...HIDE });
 }
 
 export function hasSession(target) {
   try {
-    execFileSync(getMuxBinary(), ['has-session', '-t', target], { stdio: 'ignore' });
+    execFileSync(getMuxBinary(), ['has-session', '-t', target], { stdio: 'ignore', ...HIDE });
     return true;
   } catch {
     return false;
@@ -97,7 +102,7 @@ export function hasSession(target) {
 
 export function killSession(target) {
   try {
-    execFileSync(getMuxBinary(), ['kill-session', '-t', target], { stdio: 'ignore' });
+    execFileSync(getMuxBinary(), ['kill-session', '-t', target], { stdio: 'ignore', ...HIDE });
   } catch { /* already gone */ }
 }
 
