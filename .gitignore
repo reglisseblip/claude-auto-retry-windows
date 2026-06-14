@@ -1,0 +1,4 @@
+node_modules/
+*.log
+.claude-auto-retry/
+.DS_Store

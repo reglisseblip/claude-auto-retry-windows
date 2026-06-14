@@ -1,0 +1,37 @@
+{
+  "name": "claude-auto-retry-windows",
+  "version": "0.1.0",
+  "description": "Native Windows port of claude-auto-retry: auto-resume Claude Code after subscription rate limits, using psmux (PowerShell/Windows-native tmux) instead of tmux.",
+  "type": "module",
+  "bin": {
+    "claude-auto-retry-win": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "doctor": "node bin/cli.js doctor"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "win32"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "rate-limit",
+    "retry",
+    "psmux",
+    "windows",
+    "powershell",
+    "anthropic"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "scripts/",
+    "LICENSE",
+    "README.md"
+  ]
+}
