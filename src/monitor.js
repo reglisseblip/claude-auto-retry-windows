@@ -1,19 +1,40 @@
 import { stripAnsi, isRateLimited, findRateLimitMessage } from './patterns.js';
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
-import { capturePane, sendKeys, getPaneCommand, hasSession } from './mux.js';
+import { capturePane, sendKeys, getPaneCommand, hasSession, sessionAttached, killSession } from './mux.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './logger.js';
 
 const DEFAULT_FOREGROUND_COMMANDS = ['claude', 'node', 'npx', 'tsx', 'bun', 'deno'];
 
 export function createMonitorState() {
-  return { status: 'monitoring', waitUntil: 0, attempts: 0, lastRateLimitMessage: null };
+  return {
+    status: 'monitoring', waitUntil: 0, attempts: 0, lastRateLimitMessage: null,
+    everAttached: false, unattachedSince: 0, startedAt: Date.now(),
+  };
 }
 
 // processOneTick is pure with respect to its injected `muxAdapter` and `isAlive`,
 // so it can be unit-tested without a real session.
 export async function processOneTick(state, muxAdapter, target, config, isAlive) {
   if (!isAlive()) return 'exit';
+
+  // Auto-reap: once the session loses its console (terminal closed / detached),
+  // kill it and stop monitoring. Disabled when reapUnattachedSeconds is 0
+  // (preserves detach/reattach). 'exit' (session already gone) takes priority above.
+  if (config.reapUnattachedSeconds > 0 && muxAdapter.sessionAttached) {
+    const now = Date.now();
+    const attached = await muxAdapter.sessionAttached(target);
+    if (attached > 0) {
+      state.everAttached = true;
+      state.unattachedSince = 0;
+    } else if (state.everAttached) {
+      if (!state.unattachedSince) state.unattachedSince = now;
+      if (now - state.unattachedSince >= config.reapUnattachedSeconds * 1000) return 'reap';
+    } else if (now - state.startedAt >= config.reapStartupSeconds * 1000) {
+      // Never attached within the startup grace — treat as a failed/abandoned launch.
+      return 'reap';
+    }
+  }
 
   const raw = await muxAdapter.capturePane(target, 20);
   const stripped = stripAnsi(raw);
@@ -78,7 +99,7 @@ export async function startMonitor(target) {
 
   await logger.info(`Monitor started for session ${target} (mux: ${process.env.CLAUDE_AUTO_RETRY_MUX || 'psmux'})`);
 
-  const muxAdapter = { capturePane, sendKeys, getPaneCommand };
+  const muxAdapter = { capturePane, sendKeys, getPaneCommand, sessionAttached };
   // Liveness is tied to the mux session, not a pid: when Claude exits the pane
   // closes and the session disappears.
   const isAlive = () => hasSession(target);
@@ -89,6 +110,11 @@ export async function startMonitor(target) {
       consecutiveErrors = 0;
 
       if (result === 'exit') { await logger.info('Session ended. Monitor shutting down.'); process.exit(0); }
+      if (result === 'reap') {
+        killSession(target);
+        await logger.info('Session has no attached console — reaped (killed session, monitor exiting).');
+        process.exit(0);
+      }
       if (result === 'waiting' && state.lastRateLimitMessage) {
         const secs = Math.round((state.waitUntil - Date.now()) / 1000);
         await logger.info(`Rate limit detected: "${state.lastRateLimitMessage}". Waiting ${secs}s...`);

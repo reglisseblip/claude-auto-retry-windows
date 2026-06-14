@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   getMuxBinary, muxAvailable, isInsideMux,
-  newSessionDetached, hasSession, killSession,
+  newSessionDetached, hasSession, killSession, listSessions,
 } from './mux.js';
 import { isRateLimited } from './patterns.js';
 import { parseResetTime, calculateWaitMs } from './time-parser.js';
@@ -76,6 +76,22 @@ async function launchPrintMode(args) {
   }
 }
 
+// Kill leftover orphaned clr-* sessions (no console attached) from terminals
+// that were hard-closed in the past. Age-gated so a session another terminal is
+// still attaching to (created seconds ago) is never touched. Killing the session
+// makes its old monitor exit on its next tick (has-session -> false).
+function reapStaleOrphans(currentName) {
+  const MIN_AGE_MS = 60_000;
+  for (const s of listSessions()) {
+    if (s.name === currentName) continue;
+    if (!s.name.startsWith('clr-')) continue;
+    if (s.attached > 0) continue;
+    const ts = parseInt(s.name.split('-')[2], 10); // clr-<pid>-<ts>
+    if (Number.isFinite(ts) && (Date.now() - ts) < MIN_AGE_MS) continue;
+    killSession(s.name);
+  }
+}
+
 // --- Run Claude directly in this terminal, no monitoring (fallback when the
 //     multiplexer is unavailable).
 function runClaudeDirect(claudeBin, args) {
@@ -124,6 +140,12 @@ async function launchInteractive(args) {
     env: { ...process.env, CLAUDE_AUTO_RETRY_SESSION: sessionName },
   });
   monitor.unref();
+
+  // Sweep leftover orphans from previously hard-closed terminals (best effort).
+  try {
+    const cfg = await loadConfig();
+    if (cfg.reapOrphansOnLaunch) reapStaleOrphans(sessionName);
+  } catch { /* non-fatal */ }
 
   // Attach the current terminal to the session (blocks until Claude exits or the
   // user detaches).

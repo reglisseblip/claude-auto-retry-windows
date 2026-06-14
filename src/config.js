@@ -9,6 +9,13 @@ export const DEFAULT_CONFIG = {
   fallbackWaitHours: 5,
   retryMessage: 'Continue where you left off. The previous attempt was rate limited.',
   customPatterns: [],
+  // Auto-reap: kill a session (and stop its monitor) once it has had no console
+  // attached for this long. Set to 0 to disable self-reap (keeps detach/reattach).
+  reapUnattachedSeconds: 15,
+  // Grace before reaping a session that was NEVER attached (covers a failed attach).
+  reapStartupSeconds: 60,
+  // Sweep stale orphaned clr-* sessions when launching.
+  reapOrphansOnLaunch: true,
 };
 
 const CONFIG_PATH = join(homedir(), '.claude-auto-retry.json');
@@ -22,6 +29,9 @@ function validate(cfg) {
   cfg.pollIntervalSeconds = validNumber(cfg.pollIntervalSeconds, 1, DEFAULT_CONFIG.pollIntervalSeconds);
   cfg.marginSeconds = validNumber(cfg.marginSeconds, 0, DEFAULT_CONFIG.marginSeconds);
   cfg.fallbackWaitHours = validNumber(cfg.fallbackWaitHours, 0.1, DEFAULT_CONFIG.fallbackWaitHours);
+  cfg.reapUnattachedSeconds = validNumber(cfg.reapUnattachedSeconds, 0, DEFAULT_CONFIG.reapUnattachedSeconds);
+  cfg.reapStartupSeconds = validNumber(cfg.reapStartupSeconds, 1, DEFAULT_CONFIG.reapStartupSeconds);
+  if (typeof cfg.reapOrphansOnLaunch !== 'boolean') cfg.reapOrphansOnLaunch = DEFAULT_CONFIG.reapOrphansOnLaunch;
   if (typeof cfg.retryMessage !== 'string' || !cfg.retryMessage) {
     cfg.retryMessage = DEFAULT_CONFIG.retryMessage;
   }

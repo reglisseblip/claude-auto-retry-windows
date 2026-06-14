@@ -113,6 +113,27 @@ You type `claude`  (PowerShell function from your $PROFILE)
 `claude -p`/`--print` (non-interactive) mode doesn't use psmux at all and works on
 any platform: the launcher just re-runs the command after the limit resets.
 
+## Auto-cleanup (no orphaned sessions)
+
+The monitor and session are launched automatically — you never start anything by hand.
+They're also torn down automatically:
+
+- **Normal quit** (you exit Claude): the session ends, the monitor logs *"Session ended"* and exits.
+- **Hard-closed terminal / detach**: the session would otherwise linger detached. Each monitor
+  watches `#{session_attached}` and, once its session has **no console attached for
+  `reapUnattachedSeconds` (default 15s)**, it kills the session and exits.
+- **Leftovers from before**: every launch also sweeps stale orphaned `clr-*` sessions
+  (unattached, older than 60s) — see `reapOrphansOnLaunch`.
+
+Inspect or force it anytime:
+
+```powershell
+node bin\cli.js sessions   # attached vs orphan
+node bin\cli.js reap       # kill all unattached clr-* sessions now (keeps attached ones)
+```
+
+Set `reapUnattachedSeconds` to `0` if you'd rather keep detached sessions alive for reattaching.
+
 ## Configuration
 
 Optional `~/.claude-auto-retry.json` (i.e. `C:\Users\<you>\.claude-auto-retry.json`):
@@ -125,7 +146,10 @@ Optional `~/.claude-auto-retry.json` (i.e. `C:\Users\<you>\.claude-auto-retry.js
   "fallbackWaitHours": 5,
   "retryMessage": "Continue where you left off. The previous attempt was rate limited.",
   "customPatterns": [],
-  "foregroundCommands": ["claude", "node"]
+  "foregroundCommands": ["claude", "node"],
+  "reapUnattachedSeconds": 15,
+  "reapStartupSeconds": 60,
+  "reapOrphansOnLaunch": true
 }
 ```
 
@@ -140,6 +164,8 @@ Environment overrides:
 node bin\cli.js install     Add the PowerShell `claude` wrapper to your profile(s)
 node bin\cli.js uninstall   Remove it
 node bin\cli.js doctor      Live-test psmux session / capture / send-keys
+node bin\cli.js sessions    List claude-auto-retry sessions (attached / orphan)
+node bin\cli.js reap        Kill orphaned (unattached) sessions right now
 node bin\cli.js status      Recent monitor log entries
 node bin\cli.js logs        Today's full log
 node bin\cli.js version     Print version

@@ -87,6 +87,20 @@ export async function getPaneCommand(target) {
   }
 }
 
+// Number of clients (consoles) attached to the session. 0 = nobody is looking at
+// it (terminal closed / detached). Used to auto-reap orphaned sessions. On any
+// error we return 0; the monitor checks hasSession() first, so a truly-gone
+// session is handled as 'exit' before this matters.
+export async function sessionAttached(target) {
+  try {
+    const { stdout } = await execFileAsync(getMuxBinary(), buildDisplayArgs(target, '#{session_attached}'), { ...HIDE });
+    const n = parseInt(stdout.trim(), 10);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function newSessionDetached(name, cmd, args) {
   execFileSync(getMuxBinary(), buildNewSessionArgs(name, cmd, args), { stdio: 'ignore', ...HIDE });
 }
@@ -104,6 +118,29 @@ export function killSession(target) {
   try {
     execFileSync(getMuxBinary(), ['kill-session', '-t', target], { stdio: 'ignore', ...HIDE });
   } catch { /* already gone */ }
+}
+
+// Pure parser (unit-tested): "name attached=N" lines -> [{name, attached}].
+export function parseSessionList(text) {
+  return text
+    .split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [name, att] = line.split(/\s+/);
+      return { name, attached: parseInt(att, 10) || 0 };
+    })
+    .filter(s => s.name);
+}
+
+export function listSessions() {
+  try {
+    const out = execFileSync(getMuxBinary(), ['list-sessions', '-F', '#{session_name} #{session_attached}'], { encoding: 'utf-8', ...HIDE });
+    return parseSessionList(out);
+  } catch {
+    // No server running / no sessions.
+    return [];
+  }
 }
 
 // We set CLAUDE_AUTO_RETRY_SESSION ourselves when spawning the inner process, so

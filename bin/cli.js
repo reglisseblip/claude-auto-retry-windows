@@ -8,7 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   getMuxBinary, muxAvailable, getMuxVersion,
-  newSessionDetached, hasSession, killSession, buildCaptureArgs, buildSendKeysArgs,
+  newSessionDetached, hasSession, killSession, buildCaptureArgs, buildSendKeysArgs, listSessions,
 } from '../src/mux.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -183,6 +183,12 @@ async function cmdDoctor() {
   }
   console.log(ok(`${mux} version ${getMuxVersion()}`));
 
+  // orphaned sessions?
+  const orphanCount = listSessions().filter(s => s.name.startsWith('clr-') && s.attached === 0).length;
+  console.log(orphanCount
+    ? warn(`${orphanCount} orphaned session(s) — clean with: node bin/cli.js reap`)
+    : ok('no orphaned sessions'));
+
   // wrapper installed?
   const profilesToCheck = [
     ...powershellHosts().map(h => ({ label: `${h.exe} profile`, file: h.profile })),
@@ -243,6 +249,23 @@ async function cmdDoctor() {
   process.exit(failures === 0 ? 0 : 1);
 }
 
+async function cmdSessions() {
+  const sessions = listSessions().filter(s => s.name.startsWith('clr-'));
+  if (sessions.length === 0) { console.log('No claude-auto-retry sessions.'); return; }
+  for (const s of sessions) {
+    console.log(`${s.attached > 0 ? ok('attached') : warn('orphan  ')}  ${s.name}`);
+  }
+}
+
+async function cmdReap() {
+  const sessions = listSessions().filter(s => s.name.startsWith('clr-'));
+  const orphans = sessions.filter(s => s.attached === 0);
+  for (const s of sessions.filter(s => s.attached > 0)) console.log(`  (kept, attached) ${s.name}`);
+  for (const s of orphans) { killSession(s.name); console.log(ok(`reaped ${s.name}`)); }
+  if (orphans.length === 0) console.log('No orphaned sessions to reap.');
+  else console.log(`\nReaped ${orphans.length} orphan(s); their monitors exit on next tick.`);
+}
+
 async function cmdStatus() {
   const logDir = join(homedir(), '.claude-auto-retry', 'logs');
   const today = new Date().toISOString().split('T')[0];
@@ -292,6 +315,8 @@ switch (command) {
   case 'install': await cmdInstall(); break;
   case 'uninstall': await cmdUninstall(); break;
   case 'doctor': await cmdDoctor(); break;
+  case 'reap': await cmdReap(); break;
+  case 'sessions': await cmdSessions(); break;
   case 'status': await cmdStatus(); break;
   case 'logs': await cmdLogs(); break;
   case 'version': case '--version': case '-v': await cmdVersion(); break;
@@ -301,6 +326,8 @@ switch (command) {
     console.log('  node bin/cli.js install     Add the PowerShell `claude` wrapper');
     console.log('  node bin/cli.js uninstall   Remove the wrapper');
     console.log('  node bin/cli.js doctor      Live-test psmux session/capture/send-keys');
+    console.log('  node bin/cli.js sessions    List claude-auto-retry sessions (attached/orphan)');
+    console.log('  node bin/cli.js reap        Kill orphaned (unattached) sessions now');
     console.log('  node bin/cli.js status      Show recent monitor log entries');
     console.log('  node bin/cli.js logs        Print today\'s log');
     console.log('  node bin/cli.js version     Print version');
