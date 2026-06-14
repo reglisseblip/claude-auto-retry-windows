@@ -5,6 +5,7 @@
 ### Auto-resume Claude Code after subscription rate limits — on **native Windows**, no WSL, no tmux.
 
 [![CI](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml/badge.svg)](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/reglisseblip/claude-auto-retry-windows?logo=github&color=blue)](https://github.com/reglisseblip/claude-auto-retry-windows/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#requirements)
 [![Node ≥18](https://img.shields.io/badge/node-%E2%89%A518-5FA04E?logo=node.js&logoColor=white)](#requirements)
@@ -172,6 +173,8 @@ node bin/cli.js version      Print version
 ```
 
 Logs live in `C:\Users\<you>\.claude-auto-retry\logs\<date>.log`.
+
+To remove everything: `bash scripts/uninstall.sh` (or `powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1`).
 
 ## Auto-cleanup
 
