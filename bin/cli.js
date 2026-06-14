@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
@@ -105,6 +105,48 @@ function findClaude() {
   } catch { return null; }
 }
 
+// Directory holding claude.exe — where the claude+/claudem+ .cmd shims live
+// (a .cmd can't shadow `claude` itself, but +variants are new names).
+function claudeBinDir() {
+  const claude = findClaude();
+  return claude ? dirname(claude) : null;
+}
+
+function plusCmdContent(launcherPath, monitorDefault) {
+  return `@echo off\r\n`
+    + `REM claude-auto-retry-windows shim. monitor default = ${monitorDefault}.\r\n`
+    + `set "CLAUDE_AUTO_RETRY_DEFAULT=${monitorDefault}"\r\n`
+    + `node "${launcherPath}" --dangerously-skip-permissions %*\r\n`;
+}
+
+async function installCmdShims(launcherPath) {
+  const dir = claudeBinDir();
+  if (!dir) { console.log(warn('claude.exe dir not found — skipping claude+/claudem+ shims')); return; }
+  const plus = join(dir, 'claude+.cmd');
+  // Preserve any pre-existing user claude+.cmd once.
+  if (existsSync(plus) && !existsSync(plus + '.bak')) {
+    await writeFile(plus + '.bak', await readFile(plus));
+  }
+  await writeFile(plus, plusCmdContent(launcherPath, '0'));               // vanilla + skip
+  await writeFile(join(dir, 'claudem+.cmd'), plusCmdContent(launcherPath, '1')); // monitored + skip
+  console.log(ok(`Shims: ${plus} (vanilla), ${join(dir, 'claudem+.cmd')} (monitored)`));
+}
+
+async function removeCmdShims() {
+  const dir = claudeBinDir();
+  if (!dir) return;
+  const plus = join(dir, 'claude+.cmd');
+  if (existsSync(plus + '.bak')) {
+    await writeFile(plus, await readFile(plus + '.bak'));
+    console.log(ok(`Restored ${plus} from .bak`));
+  } else if (existsSync(plus)) {
+    await unlink(plus);
+    console.log(ok(`Removed ${plus}`));
+  }
+  const claudemPlus = join(dir, 'claudem+.cmd');
+  if (existsSync(claudemPlus)) { await unlink(claudemPlus); console.log(ok(`Removed ${claudemPlus}`)); }
+}
+
 // --- commands ------------------------------------------------------------
 
 async function cmdInstall() {
@@ -144,9 +186,15 @@ async function cmdInstall() {
     process.exit(1);
   }
 
+  // claude+ / claudem+ .cmd shims (for cmd / PowerShell).
+  await installCmdShims(LAUNCHER_PATH);
+
   console.log(`\nInstalled into ${targets} shell profile(s). Launcher: ${LAUNCHER_PATH}`);
-  console.log('\nOpen a NEW shell (PowerShell: new window; bash: `source ~/.bashrc`) and use `claude` as usual.');
-  console.log('Verify everything with:  node bin/cli.js doctor');
+  console.log('\nFour commands (open a NEW shell first; bash: `source ~/.bashrc`):');
+  console.log('  claude    = vanilla            claudem   = monitored (auto-retry)');
+  console.log('  claude+   = vanilla + skip     claudem+  = monitored + skip');
+  console.log('Per-launch override: add --monitor or --no-monitor to any of them.');
+  console.log('\nVerify everything with:  node bin/cli.js doctor');
 }
 
 async function cmdUninstall() {
@@ -158,6 +206,7 @@ async function cmdUninstall() {
     await removeWrapper(rc);
     console.log(ok(`Wrapper removed from ${rc}`));
   }
+  await removeCmdShims();
   console.log('\nOpen a new shell to complete removal.');
 }
 
@@ -197,7 +246,14 @@ async function cmdDoctor() {
   for (const { label, file } of profilesToCheck) {
     let installed = false;
     try { installed = (await readFile(file, 'utf-8')).includes(MARKER_START); } catch {}
-    console.log(installed ? ok(`wrapper installed in ${label}`) : warn(`wrapper NOT in ${label} (run: node bin/cli.js install)`));
+    console.log(installed ? ok(`claude/claudem functions in ${label}`) : warn(`functions NOT in ${label} (run: node bin/cli.js install)`));
+  }
+
+  // +variant shims
+  const binDir = claudeBinDir();
+  for (const name of ['claude+.cmd', 'claudem+.cmd']) {
+    const present = binDir && existsSync(join(binDir, name));
+    console.log(present ? ok(`${name} present`) : warn(`${name} missing (run: node bin/cli.js install)`));
   }
 
   // --- live primitive probe ---

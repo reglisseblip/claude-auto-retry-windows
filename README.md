@@ -57,7 +57,7 @@ or directly:
 node bin\cli.js install      # adds a `claude` function to your PowerShell $PROFILE
 ```
 
-Then open a **new** PowerShell window and use `claude` exactly as before.
+Then open a **new** shell. You now have four commands (see below).
 
 ## Verify
 
@@ -67,25 +67,30 @@ node bin\cli.js doctor
 
 You should see `All checks passed — interactive auto-retry is supported on this machine.`
 
-## Wrapping `claude+` and other aliases
+## Commands & modes
 
-A common setup is a flagged variant, e.g. `claude+` = `claude --dangerously-skip-permissions`.
-To give that variant auto-retry too:
+Monitoring is **opt-in**: choose it by the command name or a flag. No prompt.
 
-- **bash / zsh** (incl. Git Bash): nothing extra. An alias like
-  `alias claude+="claude --dangerously-skip-permissions"` expands to `claude …`, which
-  hits the installed `claude()` function — so it routes through the launcher
-  automatically once you've run `install`.
-- **PowerShell / cmd**: if the variant is a `.cmd`/`.bat` shim that calls `claude`
-  directly (e.g. `%USERPROFILE%\.local\bin\claude+.cmd`), it bypasses the launcher.
-  Point it at the launcher instead (keep a `.bak` of the original):
+| Command    | Monitoring (psmux + auto-retry) | Permissions |
+|------------|---------------------------------|-------------|
+| `claude`   | off (vanilla)                   | normal |
+| `claude+`  | off (vanilla)                   | `--dangerously-skip-permissions` |
+| `claudem`  | **on**                          | normal |
+| `claudem+` | **on**                          | `--dangerously-skip-permissions` |
 
-  ```cmd
-  @echo off
-  node "C:\path\to\claude-auto-retry-windows\src\launcher.js" --dangerously-skip-permissions %*
-  ```
+Per-launch override (works on any of them, stripped before reaching Claude):
 
-  Any extra args you pass to `claude+` are forwarded after the flag.
+```
+claude  --monitor      # this run IS monitored, despite the name
+claudem --no-monitor   # this run is vanilla, despite the name
+```
+
+How the choice is resolved, highest priority first: `--monitor`/`--no-monitor` flag →
+`CLAUDE_AUTO_RETRY_DEFAULT` env (set by each command's wrapper) → `enabled` in config.
+
+Wiring: `claude` / `claudem` are shell functions (bash + PowerShell); `claude+` / `claudem+`
+are `.cmd` shims next to `claude.exe` (a `.cmd` can't shadow `claude` itself, but the
++variants are new names). `claude -p` / `claudem -p` (print mode) never use psmux.
 
 ## How it works
 
@@ -140,6 +145,7 @@ Optional `~/.claude-auto-retry.json` (i.e. `C:\Users\<you>\.claude-auto-retry.js
 
 ```json
 {
+  "enabled": true,
   "maxRetries": 5,
   "pollIntervalSeconds": 5,
   "marginSeconds": 60,
@@ -157,6 +163,7 @@ Environment overrides:
 
 - `CLAUDE_AUTO_RETRY_MUX` — multiplexer binary (default `psmux` on Windows, `tmux` elsewhere). E.g. set to `tmux` to reuse this code under WSL.
 - `CLAUDE_BIN` — explicit path to the Claude executable.
+- `CLAUDE_AUTO_RETRY_DEFAULT` — `1`/`0` to default a launch to monitored/vanilla (set automatically by the `claude` vs `claudem` wrappers; a `--monitor`/`--no-monitor` flag overrides it).
 
 ## Commands
 

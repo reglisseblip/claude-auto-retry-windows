@@ -3,6 +3,10 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 
 export const DEFAULT_CONFIG = {
+  // Fallback when neither a --monitor/--no-monitor flag nor CLAUDE_AUTO_RETRY_DEFAULT
+  // is set (the per-command wrappers always set the env, so this mainly applies to
+  // a bare `node launcher.js`). true = monitored by default.
+  enabled: true,
   maxRetries: 5,
   pollIntervalSeconds: 5,
   marginSeconds: 60,
@@ -32,6 +36,7 @@ function validate(cfg) {
   cfg.reapUnattachedSeconds = validNumber(cfg.reapUnattachedSeconds, 0, DEFAULT_CONFIG.reapUnattachedSeconds);
   cfg.reapStartupSeconds = validNumber(cfg.reapStartupSeconds, 1, DEFAULT_CONFIG.reapStartupSeconds);
   if (typeof cfg.reapOrphansOnLaunch !== 'boolean') cfg.reapOrphansOnLaunch = DEFAULT_CONFIG.reapOrphansOnLaunch;
+  if (typeof cfg.enabled !== 'boolean') cfg.enabled = DEFAULT_CONFIG.enabled;
   if (typeof cfg.retryMessage !== 'string' || !cfg.retryMessage) {
     cfg.retryMessage = DEFAULT_CONFIG.retryMessage;
   }

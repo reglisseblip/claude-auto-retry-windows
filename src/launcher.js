@@ -28,6 +28,26 @@ function isPrintMode(args) {
   return args.includes('-p') || args.includes('--print');
 }
 
+// Decide whether this launch is monitored (psmux + auto-retry) or vanilla.
+// Precedence: explicit --monitor/--no-monitor flag (stripped from args) >
+// CLAUDE_AUTO_RETRY_DEFAULT env (set by the per-command wrappers) > config.enabled.
+// Exported pure so it can be unit-tested.
+export function resolveMode(argv, cfg = {}, env = process.env) {
+  let monitor = null;
+  const args = [];
+  for (const a of argv) {
+    if (a === '--monitor' || a === '--retry') { monitor = true; continue; }
+    if (a === '--no-monitor' || a === '--no-retry') { monitor = false; continue; }
+    args.push(a);
+  }
+  if (monitor === null) {
+    if (env.CLAUDE_AUTO_RETRY_DEFAULT === '1') monitor = true;
+    else if (env.CLAUDE_AUTO_RETRY_DEFAULT === '0') monitor = false;
+  }
+  if (monitor === null) monitor = cfg.enabled !== false; // default: monitored
+  return { monitor, args };
+}
+
 // --- Print mode: capture stdout/stderr, retry the whole command on rate limit.
 //     No multiplexer needed; works on any platform.
 async function launchPrintMode(args) {
@@ -141,12 +161,6 @@ async function launchInteractive(args) {
   });
   monitor.unref();
 
-  // Sweep leftover orphans from previously hard-closed terminals (best effort).
-  try {
-    const cfg = await loadConfig();
-    if (cfg.reapOrphansOnLaunch) reapStaleOrphans(sessionName);
-  } catch { /* non-fatal */ }
-
   // Attach the current terminal to the session (blocks until Claude exits or the
   // user detaches).
   const attach = spawn(mux, ['attach-session', '-t', sessionName], { stdio: 'inherit' });
@@ -163,18 +177,31 @@ async function launchInteractive(args) {
   return code;
 }
 
-// --- Main ---
-const args = process.argv.slice(2);
+// --- Main (only when run directly, so tests can import resolveMode) ---
+const isDirectRun = process.argv[1]?.endsWith('launcher.js');
+if (isDirectRun) {
+  const cfg = await loadConfig();
 
-let exitCode;
-if (isPrintMode(args)) {
-  exitCode = await launchPrintMode(args);
-} else if (isInsideMux()) {
-  // Already inside a mux pane: just run Claude (the outer invocation owns the
-  // monitor). Prevents nested sessions.
-  exitCode = await runClaudeDirect(findClaudeBinary(), args);
-} else {
-  exitCode = await launchInteractive(args);
+  // Best-effort sweep of stale orphaned sessions, even on a vanilla launch.
+  if (cfg.reapOrphansOnLaunch && muxAvailable()) {
+    try { reapStaleOrphans(null); } catch { /* non-fatal */ }
+  }
+
+  const { monitor, args } = resolveMode(process.argv.slice(2), cfg);
+
+  let exitCode;
+  if (!monitor) {
+    // Vanilla: plain Claude, no psmux, no auto-retry.
+    exitCode = await runClaudeDirect(findClaudeBinary(), args);
+  } else if (isPrintMode(args)) {
+    exitCode = await launchPrintMode(args);
+  } else if (isInsideMux()) {
+    // Already inside a mux pane: just run Claude (the outer invocation owns the
+    // monitor). Prevents nested sessions.
+    exitCode = await runClaudeDirect(findClaudeBinary(), args);
+  } else {
+    exitCode = await launchInteractive(args);
+  }
+
+  process.exit(exitCode);
 }
-
-process.exit(exitCode);
