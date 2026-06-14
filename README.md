@@ -2,7 +2,7 @@
 
 # claude-auto-retry-windows
 
-### Auto-resume Claude Code after subscription rate limits — on **native Windows**, no WSL, no tmux.
+### Auto-resume Claude Code after subscription rate limits, on **native Windows**. No WSL, no tmux.
 
 [![CI](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml/badge.svg)](https://github.com/reglisseblip/claude-auto-retry-windows/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/reglisseblip/claude-auto-retry-windows?logo=github&color=blue)](https://github.com/reglisseblip/claude-auto-retry-windows/releases)
@@ -14,11 +14,11 @@
 </div>
 
 When Claude Code stops with *“You've hit your limit · resets 3pm”*, this tool waits for the
-reset and types **`continue`** for you. You come back to finished work — no babysitting.
+reset and types **`continue`** for you. You come back to finished work, no babysitting.
 
 It's a Windows port of [`claude-auto-retry`](https://github.com/cheapestinference/claude-auto-retry)
-(which requires **tmux**), rebuilt on [**psmux**](https://github.com/psmux/psmux) — a native
-Windows terminal multiplexer — so everything runs in **Git Bash, PowerShell, or cmd** with no WSL.
+(which requires **tmux**), rebuilt on [**psmux**](https://github.com/psmux/psmux), a native
+Windows terminal multiplexer, so everything runs in **Git Bash, PowerShell, or cmd** with no WSL.
 
 ---
 
@@ -52,13 +52,13 @@ sends `continue` automatically.
 
 ## Features
 
-- 🔁 **Auto-continue** after the rate limit resets — accurate, timezone/DST-aware reset parsing.
-- 🪟 **100 % native Windows** — uses **psmux**, not tmux; works in Git Bash, PowerShell and cmd, **no WSL**.
-- 🎚️ **Opt-in monitoring** — `claude` (vanilla) vs `claudem` (monitored), or override any launch with `--monitor` / `--no-monitor`.
-- 🧹 **Self-cleaning** — orphaned sessions are auto-reaped; no leftover background processes flashing console windows.
-- 🩺 **`doctor`** — live-tests every psmux primitive on *your* machine before you trust it.
-- 🖨️ **Print mode too** — `claude -p` retries headlessly with no multiplexer.
-- 📦 **No dependencies** — just Node ≥ 18 and psmux.
+- 🔁 **Auto-continue** after the rate limit resets, with accurate timezone/DST-aware reset parsing.
+- 🪟 **100 % native Windows**: uses **psmux**, not tmux; works in Git Bash, PowerShell and cmd, **no WSL**.
+- 🎚️ **Opt-in monitoring**: `claude` (vanilla) vs `claudem` (monitored), or override any launch with `--monitor` / `--no-monitor`.
+- 🧹 **Self-cleaning**: orphaned sessions are auto-reaped; no leftover background processes flashing console windows.
+- 🩺 **`doctor`**: live-tests every psmux primitive on *your* machine before you trust it.
+- 🖨️ **Print mode too**: `claude -p` retries headlessly with no multiplexer.
+- 📦 **No dependencies**: just Node ≥ 18 and psmux.
 
 ## Install
 
@@ -88,7 +88,7 @@ Then open a **new** shell (bash: `source ~/.bashrc`). Verify with `node bin/cli.
 
 ## Commands & modes
 
-Monitoring is **opt-in** — choose it by command name or a flag. No prompts.
+Monitoring is **opt-in**: choose it by command name or a flag. No prompts.
 
 | Command    | Monitoring (psmux + auto-retry) | Permissions |
 |------------|:-------------------------------:|-------------|
@@ -106,7 +106,7 @@ claudem --no-monitor   # this run is vanilla, despite the name
 
 Resolution order: `--monitor`/`--no-monitor` flag → `CLAUDE_AUTO_RETRY_DEFAULT` env (set by each
 wrapper) → `enabled` in config. In a monitored session you'll see the green **psmux status bar** at
-the bottom — that's how you know auto-retry is armed.
+the bottom; that's how you know auto-retry is armed.
 
 ## How it works
 
@@ -156,7 +156,7 @@ Environment overrides:
 | Variable | Effect |
 |---|---|
 | `CLAUDE_AUTO_RETRY_DEFAULT` | `1`/`0` to default a launch to monitored/vanilla (set by the wrappers; a flag overrides it). |
-| `CLAUDE_AUTO_RETRY_MUX` | Multiplexer binary (default `psmux` on Windows, `tmux` elsewhere — e.g. reuse under WSL). |
+| `CLAUDE_AUTO_RETRY_MUX` | Multiplexer binary (default `psmux` on Windows, `tmux` elsewhere, e.g. reuse under WSL). |
 | `CLAUDE_BIN` | Explicit path to the Claude executable. |
 
 ## CLI reference
@@ -178,7 +178,7 @@ To remove everything: `bash scripts/uninstall.sh` (or `powershell -ExecutionPoli
 
 ## Auto-cleanup
 
-You never start the monitor by hand — and nothing is left running:
+You never start the monitor by hand, and nothing is left running:
 
 - **Normal quit:** the session ends, the monitor logs *“Session ended”* and exits.
 - **Hard-closed terminal / detach:** each monitor watches `#{session_attached}`; once its session has
@@ -194,9 +194,9 @@ Set `reapUnattachedSeconds` to `0` to keep detached sessions alive for reattachi
 
 ## Requirements
 
-- Windows 10/11 — PowerShell 7+ recommended (Windows PowerShell 5.1 also works), Git Bash, or cmd
+- Windows 10/11, PowerShell 7+ recommended (Windows PowerShell 5.1 also works), Git Bash, or cmd
 - [Node.js](https://nodejs.org) ≥ 18
-- [psmux](https://github.com/psmux/psmux) ≥ 3 — `winget install --id marlocarlo.psmux`
+- [psmux](https://github.com/psmux/psmux) ≥ 3: `winget install --id marlocarlo.psmux`
 - Claude Code (`claude` on your PATH)
 
 ## How it's verified
@@ -213,8 +213,8 @@ relies on, so you can trust it on your exact setup:
 | `display-message '#{…}'` | only send to Claude, never the wrong process |
 | `kill-session` | cleanup |
 
-The unit tests (`npm test`) cover the pure logic — rate-limit detection, timezone/DST reset parsing,
-mode resolution and the reap state machine — and run in CI on every push.
+The unit tests (`npm test`) cover the pure logic (rate-limit detection, timezone/DST reset parsing,
+mode resolution and the reap state machine) and run in CI on every push.
 
 > **Note:** interactive `attach-session` needs a real console, so it's the one thing the automated
 > probe can't exercise. It works best in **Windows Terminal / PowerShell**; if it ever fails the
@@ -251,4 +251,4 @@ The platform-specific code lives in `src/mux.js` (psmux/tmux adapter), `src/laun
 - Original tool & detection/timing logic: [cheapestinference/claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) (MIT)
 - Windows multiplexer: [psmux](https://github.com/psmux/psmux)
 
-Author: **reglisseblip** · MIT licensed — see [`LICENSE`](LICENSE).
+Author: **reglisseblip** · MIT licensed. See [`LICENSE`](LICENSE).
